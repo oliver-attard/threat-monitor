@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Global Threat Monitor Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<!-- Leaflet CSS for Map -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+<style>
+  body { margin:0; padding:0; }
+  #map { height: 100vh; width: 100%; }
+  /* Optional: add a panel for news articles */
+  #sidebar {
+    position: absolute;
+    top: 10px; right: 10px;
+    width: 300px;
+    max-height: 90vh;
+    background: rgba(255,255,255,0.9);
+    overflow-y: auto;
+    padding: 10px;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    z-index: 1000;
+    border-radius: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="sidebar"><h3>Recent Threat News & Tweets</h3><div id="articles"></div></div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+  // Initialize the map
+  const map = L.map('map').setView([20,0], 2);
+
+  // Add OpenStreetMap tile layer
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  // Function to add a threat marker
+  function addThreatMarker(lat, lon, popupText, color='red') {
+    const marker = L.circleMarker([lat, lon], {
+      radius: 8,
+      fillColor: color,
+      color: '#000',
+      weight: 1,
+      opacity: 1,
+      fillOpacity: 0.8
+    }).addTo(map);
+    marker.bindPopup(popupText);
+    // Remove after 2 minutes
+    setTimeout(() => map.removeLayer(marker), 2 * 60 * 1000);
+  }
+
+  // Append news/tweet info to sidebar
+  function addArticleToSidebar(title, url) {
+    const container = document.getElementById('articles');
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.innerText = title;
+    container.appendChild(link);
+    container.appendChild(document.createElement('br'));
+  }
+
+  // Connect to your WebSocket server.
+  // Change the URL if deployed elsewhere
+  const socket = new WebSocket('ws://<YOUR_SERVER_URL>');
+
+  socket.onopen = () => {
+    console.log('Connected to WebSocket server');
+  };
+
+  socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === 'news') {
+      // Display news articles
+      data.articles.forEach(article => {
+        addArticleToSidebar(article.title, article.url);
+      });
+    } else if (data.type === 'tweet') {
+      // Display tweet on map if it has coordinates
+      const tweet = data.tweet;
+      if (tweet.coordinates && tweet.coordinates.type === 'Point') {
+        const coords = tweet.coordinates.coordinates;
+        const lat = coords[1], lon = coords[0];
+        const text = tweet.text;
+        addThreatMarker(lat, lon, `<b>Tweet:</b> ${text}`);
+      }
+    }
+  };
+
+  socket.onerror = (err) => {
+    console.error('WebSocket error:', err);
+  };
+</script>
+</body>
+</html>
